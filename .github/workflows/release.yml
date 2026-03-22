@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish-npm:
+    name: Publish to npm
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Install tree-sitter CLI
+        run: npm install -g tree-sitter-cli
+
+      - name: Generate parser
+        working-directory: packages/tree-sitter-rgbds
+        run: tree-sitter generate
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build server
+        working-directory: packages/server
+        run: npx tsc -p tsconfig.json
+
+      - name: Publish tree-sitter-rgbds
+        working-directory: packages/tree-sitter-rgbds
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish rgbds-language-server
+        working-directory: packages/server
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-vscode:
+    name: Publish VS Code Extension
+    runs-on: ubuntu-24.04-arm
+    needs: publish-npm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install tree-sitter CLI
+        run: npm install -g tree-sitter-cli
+
+      - name: Generate parser
+        working-directory: packages/tree-sitter-rgbds
+        run: tree-sitter generate
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build server
+        working-directory: packages/server
+        run: npx tsc -p tsconfig.json
+
+      - name: Build extension
+        working-directory: packages/vscode
+        run: npx tsc -p tsconfig.json
+
+      - name: Package and publish
+        working-directory: packages/vscode
+        run: npx @vscode/vsce publish
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+  github-release:
+    name: GitHub Release
+    runs-on: ubuntu-24.04-arm
+    needs: publish-npm
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install tree-sitter CLI
+        run: npm install -g tree-sitter-cli
+
+      - name: Generate parser
+        working-directory: packages/tree-sitter-rgbds
+        run: tree-sitter generate
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build server
+        working-directory: packages/server
+        run: npx tsc -p tsconfig.json
+
+      - name: Build extension
+        working-directory: packages/vscode
+        run: npx tsc -p tsconfig.json
+
+      - name: Package VSIX
+        working-directory: packages/vscode
+        run: npx @vscode/vsce package -o rgbds-lsp.vsix
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: packages/vscode/rgbds-lsp.vsix
+          generate_release_notes: true

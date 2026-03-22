@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  grammar:
+    name: Tree-sitter Grammar
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install tree-sitter CLI
+        run: npm install -g tree-sitter-cli
+
+      - name: Generate parser
+        working-directory: packages/tree-sitter-rgbds
+        run: tree-sitter generate
+
+      - name: Run grammar tests
+        working-directory: packages/tree-sitter-rgbds
+        run: tree-sitter test
+
+  server:
+    name: Language Server
+    runs-on: ubuntu-24.04-arm
+    needs: grammar
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install tree-sitter CLI
+        run: npm install -g tree-sitter-cli
+
+      - name: Generate parser (needed before npm install builds native addon)
+        working-directory: packages/tree-sitter-rgbds
+        run: tree-sitter generate
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build server
+        working-directory: packages/server
+        run: npx tsc -p tsconfig.json
+
+  vscode:
+    name: VS Code Extension
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+
+      - name: Build extension
+        working-directory: packages/vscode
+        run: npx tsc -p tsconfig.json
