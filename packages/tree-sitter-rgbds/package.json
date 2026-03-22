@@ -16,7 +16,9 @@
     "*.wasm"
   ],
   "scripts": {
+    "install": "tree-sitter generate && node-gyp rebuild",
     "generate": "tree-sitter generate",
+    "build": "tree-sitter generate && node-gyp rebuild",
     "test": "tree-sitter test",
     "build-wasm": "tree-sitter build --wasm",
     "parse": "tree-sitter parse"

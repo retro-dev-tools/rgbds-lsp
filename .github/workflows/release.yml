@@ -19,16 +19,8 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
 
-      - name: Install dependencies
+      - name: Install dependencies (generates parser + builds native bindings)
         run: npm install
-
-      - name: Generate parser
-        working-directory: packages/tree-sitter-rgbds
-        run: npx tree-sitter generate
-
-      - name: Build native bindings
-        working-directory: packages/tree-sitter-rgbds
-        run: npx node-gyp rebuild
 
       - name: Build server
         working-directory: packages/server
@@ -57,16 +49,8 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies
+      - name: Install dependencies (generates parser + builds native bindings)
         run: npm install
-
-      - name: Generate parser
-        working-directory: packages/tree-sitter-rgbds
-        run: npx tree-sitter generate
-
-      - name: Build native bindings
-        working-directory: packages/tree-sitter-rgbds
-        run: npx node-gyp rebuild
 
       - name: Build server
         working-directory: packages/server
@@ -95,16 +79,8 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies
+      - name: Install dependencies (generates parser + builds native bindings)
         run: npm install
-
-      - name: Generate parser
-        working-directory: packages/tree-sitter-rgbds
-        run: npx tree-sitter generate
-
-      - name: Build native bindings
-        working-directory: packages/tree-sitter-rgbds
-        run: npx node-gyp rebuild
 
       - name: Build server
         working-directory: packages/server
