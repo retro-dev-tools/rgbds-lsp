@@ -29,9 +29,7 @@ module.exports = grammar({
 
   word: $ => $.identifier,
 
-  conflicts: $ => [
-    [$.sp_offset, $.operand],
-  ],
+  conflicts: $ => [],
 
   rules: {
     source_file: $ => repeat($.line),
