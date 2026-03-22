@@ -9,7 +9,7 @@ on:
 jobs:
   grammar:
     name: Tree-sitter Grammar
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
@@ -30,7 +30,7 @@ jobs:
 
   server:
     name: Language Server
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: grammar
     steps:
       - uses: actions/checkout@v4
@@ -56,7 +56,7 @@ jobs:
 
   vscode:
     name: VS Code Extension
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 

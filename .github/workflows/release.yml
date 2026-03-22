@@ -8,7 +8,7 @@ on:
 jobs:
   publish-npm:
     name: Publish to npm
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
     steps:
@@ -25,6 +25,10 @@ jobs:
       - name: Generate parser
         working-directory: packages/tree-sitter-rgbds
         run: npx tree-sitter generate
+
+      - name: Build native bindings
+        working-directory: packages/tree-sitter-rgbds
+        run: npx node-gyp rebuild
 
       - name: Build server
         working-directory: packages/server
@@ -44,7 +48,7 @@ jobs:
 
   publish-vscode:
     name: Publish VS Code Extension
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: publish-npm
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +59,18 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      - name: Generate parser
+        working-directory: packages/tree-sitter-rgbds
+        run: npx tree-sitter generate
+
+      - name: Build native bindings
+        working-directory: packages/tree-sitter-rgbds
+        run: npx node-gyp rebuild
+
+      - name: Build server
+        working-directory: packages/server
+        run: npx tsc -p tsconfig.json
 
       - name: Build extension
         working-directory: packages/vscode
@@ -68,7 +84,7 @@ jobs:
 
   github-release:
     name: GitHub Release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: publish-npm
     permissions:
       contents: write
@@ -81,6 +97,18 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      - name: Generate parser
+        working-directory: packages/tree-sitter-rgbds
+        run: npx tree-sitter generate
+
+      - name: Build native bindings
+        working-directory: packages/tree-sitter-rgbds
+        run: npx node-gyp rebuild
+
+      - name: Build server
+        working-directory: packages/server
+        run: npx tsc -p tsconfig.json
 
       - name: Build extension
         working-directory: packages/vscode
