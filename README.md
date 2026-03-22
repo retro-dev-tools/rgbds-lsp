@@ -68,7 +68,7 @@ rgbds-language-server --stdio
 ## Development
 
 ```bash
-git clone https://github.com/TODO/rgbds-lsp.git
+git clone https://github.com/minorum/rgbds-lsp.git
 cd rgbds-lsp
 npm install
 
