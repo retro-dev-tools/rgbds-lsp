@@ -39,7 +39,14 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies (generates parser + builds native bindings)
+      - name: Install tree-sitter CLI
+        run: npm install -g tree-sitter-cli
+
+      - name: Generate parser (needed before npm install builds native addon)
+        working-directory: packages/tree-sitter-rgbds
+        run: tree-sitter generate
+
+      - name: Install dependencies
         run: npm install
 
       - name: Build server
@@ -57,7 +64,7 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --ignore-scripts
 
       - name: Build extension
         working-directory: packages/vscode
