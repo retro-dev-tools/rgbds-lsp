@@ -50,7 +50,7 @@ claude plugin marketplace add minorum/rgbds-lsp
 claude plugin install rgbds-lsp
 ```
 
-The plugin builds the server automatically on first session and launches it for `.asm` and `.inc` files.
+The plugin installs the language server from npm automatically on first session and launches it for `.asm` and `.inc` files.
 
 ### Standalone
 

@@ -21,6 +21,7 @@ config.gypi
 .DS_Store
 package-lock.json
 _temp_repos/
+prebuilds/
 
 # tree-sitter generated (commit parser.c so plugin installs work without tree-sitter-cli)
 packages/tree-sitter-rgbds/src/tree_sitter/

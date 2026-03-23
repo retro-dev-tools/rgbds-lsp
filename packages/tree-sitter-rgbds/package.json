@@ -16,9 +16,10 @@
     "*.wasm"
   ],
   "scripts": {
-    "generate": "tree-sitter generate",
-    "build": "tree-sitter generate && node-gyp rebuild",
-    "test": "tree-sitter generate && tree-sitter test",
+    "generate": "npx tree-sitter generate",
+    "build": "npx node-gyp rebuild",
+    "test": "npx tree-sitter generate && npx tree-sitter test",
+    "prebuild": "prebuildify --napi --strip",
     "build-wasm": "tree-sitter build --wasm",
     "parse": "tree-sitter parse"
   },
@@ -27,6 +28,7 @@
     "node-gyp-build": "^4.8.0"
   },
   "devDependencies": {
+    "prebuildify": "^6.0.0",
     "tree-sitter-cli": "^0.25.0"
   },
   "tree-sitter": [
