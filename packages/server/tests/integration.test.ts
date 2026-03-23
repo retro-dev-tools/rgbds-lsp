@@ -143,4 +143,57 @@ describe('LSP integration', () => {
             expect(mainEdits.length).toBeGreaterThanOrEqual(2);
         });
     });
+
+    describe('incremental reindex', () => {
+        it('should update symbols when a file changes', async () => {
+            // Verify InitSystem exists before the change
+            const hoverBefore = await client.hover(fileUri('main.asm'), 3, 10) as any;
+            expect(hoverBefore).not.toBeNull();
+            expect(hoverBefore.contents.value).toContain('InitSystem');
+
+            // "Edit" the file: rename InitSystem to BootSystem
+            const newContent = fs.readFileSync(path.join(FIXTURES, 'main.asm'), 'utf-8')
+                .replace(/InitSystem/g, 'BootSystem');
+            client.openDocument(fileUri('main.asm'), newContent);
+
+            // Small delay for server to process the didChange
+            await new Promise(r => setTimeout(r, 200));
+
+            // Old name should no longer resolve
+            // "call InitSystem" was on line 3 — now it says "call BootSystem"
+            // Hover on the new name at the definition (line 6, col 0)
+            const hoverNew = await client.hover(fileUri('main.asm'), 6, 0) as any;
+            expect(hoverNew).not.toBeNull();
+            expect(hoverNew.contents.value).toContain('BootSystem');
+
+            // Completion should have BootSystem, not InitSystem
+            const completion = await client.completion(fileUri('main.asm'), 0, 0) as any[];
+            const names = completion.map((c: any) => c.label);
+            expect(names).toContain('BootSystem');
+            expect(names).not.toContain('InitSystem');
+
+            // Symbols from other files should still be intact
+            expect(names).toContain('CopyBytes');
+            expect(names).toContain('SCREEN_WIDTH');
+
+            // Restore original content
+            const original = fs.readFileSync(path.join(FIXTURES, 'main.asm'), 'utf-8');
+            client.openDocument(fileUri('main.asm'), original);
+        }, 15000);
+
+        it('should not lose cross-file symbols on single file reindex', async () => {
+            // Count total symbols before
+            const before = await client.completion(fileUri('main.asm'), 0, 0) as any[];
+            const countBefore = before.length;
+
+            // Re-open utils.inc with identical content (triggers reindex)
+            const utilsContent = fs.readFileSync(path.join(FIXTURES, 'utils.inc'), 'utf-8');
+            client.openDocument(fileUri('utils.inc'), utilsContent);
+            await new Promise(r => setTimeout(r, 200));
+
+            // Count should be the same — no symbols lost
+            const after = await client.completion(fileUri('main.asm'), 0, 0) as any[];
+            expect(after.length).toBe(countBefore);
+        }, 15000);
+    });
 });

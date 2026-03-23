@@ -42,7 +42,26 @@ export class Indexer {
         this.trees.set(uri, tree);
         this.fileContents.set(uri, content);
         this.indexedFileUris.add(uri);
-        this.rebuildIndex();
+        this.reindexFile(uri, tree);
+    }
+
+    /** Remove symbols for a single file and re-extract them. */
+    private reindexFile(uri: string, tree: Parser.Tree): void {
+        // Remove old definitions from this file
+        for (const [name, def] of this.definitions) {
+            if (def.file === uri) this.definitions.delete(name);
+        }
+        // Remove old references from this file
+        for (const [name, refs] of this.references) {
+            const filtered = refs.filter(r => r.file !== uri);
+            if (filtered.length === 0) {
+                this.references.delete(name);
+            } else {
+                this.references.set(name, filtered);
+            }
+        }
+        // Re-extract symbols for this file only
+        this.extractSymbols(uri, tree);
     }
 
     public indexProject(rootDir: string): { indexed: number; failed: number } {
