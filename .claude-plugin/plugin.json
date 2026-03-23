@@ -14,7 +14,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "test -f \"${CLAUDE_PLUGIN_ROOT}/packages/server/dist/index.js\" || (cd \"${CLAUDE_PLUGIN_ROOT}\" && npm install && npm run build)"
+            "command": "test -f \"${CLAUDE_PLUGIN_ROOT}/packages/server/dist/index.js\" || (cd \"${CLAUDE_PLUGIN_ROOT}\" && npm install && npm run build) && node \"${CLAUDE_PLUGIN_ROOT}/packages/server/dist/check.js\""
           }
         ]
       }
