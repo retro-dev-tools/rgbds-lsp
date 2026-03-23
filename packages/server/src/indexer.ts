@@ -68,6 +68,35 @@ export class Indexer {
         return { indexed, failed };
     }
 
+    public async indexProjectAsync(rootDir: string): Promise<{ indexed: number; failed: number }> {
+        const files = collectRgbdsFiles(rootDir);
+        let indexed = 0;
+        let failed = 0;
+        const BATCH_SIZE = 10;
+
+        for (let i = 0; i < files.length; i++) {
+            try {
+                const content = fs.readFileSync(files[i], 'utf-8');
+                const uri = pathToUri(files[i]);
+                const tree = this.parser.parse(content);
+                this.trees.set(uri, tree);
+                this.fileContents.set(uri, content);
+                this.indexedFileUris.add(uri);
+                indexed++;
+            } catch {
+                failed++;
+            }
+
+            // Yield to the event loop every BATCH_SIZE files
+            if ((i + 1) % BATCH_SIZE === 0) {
+                await new Promise(resolve => setImmediate(resolve));
+            }
+        }
+
+        this.rebuildIndex();
+        return { indexed, failed };
+    }
+
     private rebuildIndex(): void {
         this.definitions.clear();
         this.references.clear();

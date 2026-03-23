@@ -31,13 +31,13 @@ import * as path from 'path';
 const connection = createConnection(ProposedFeatures.all);
 const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 
+let pendingWorkspaceFolders: string[] = [];
+
 connection.onInitialize((params: InitializeParams) => {
-    // Index workspace folders
+    // Collect workspace folders for background indexing after handshake
     if (params.workspaceFolders) {
         for (const folder of params.workspaceFolders) {
-            const folderPath = uriToPath(folder.uri);
-            rgbdsIndexer.indexProject(folderPath);
-            connection.console.log(`Indexed workspace: ${folderPath} (${rgbdsIndexer.definitions.size} definitions)`);
+            pendingWorkspaceFolders.push(uriToPath(folder.uri));
         }
     }
 
@@ -64,6 +64,16 @@ connection.onInitialize((params: InitializeParams) => {
 
 connection.onInitialized(() => {
     connection.console.log('RGBDS Language Server initialized');
+
+    // Index workspace folders in the background after the handshake completes
+    const folders = [...pendingWorkspaceFolders];
+    pendingWorkspaceFolders = [];
+    (async () => {
+        for (const folderPath of folders) {
+            const result = await rgbdsIndexer.indexProjectAsync(folderPath);
+            connection.console.log(`Indexed workspace: ${folderPath} (${rgbdsIndexer.definitions.size} definitions, ${result.indexed} files)`);
+        }
+    })();
 });
 
 // Reindex on file change
