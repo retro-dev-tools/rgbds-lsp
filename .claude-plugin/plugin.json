@@ -1,7 +1,7 @@
 {
   "name": "rgbds-lsp",
   "description": "RGBDS Game Boy assembly language server — go-to-definition, find references, completion, hover, diagnostics, rename, document outline",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "author": {
     "name": "rgbds-lsp contributors"
   },
@@ -14,7 +14,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npm install --prefix \"${CLAUDE_PLUGIN_DATA}\" rgbds-language-server@0.1.3 2>/dev/null || true"
+            "command": "npm install --prefix \"${CLAUDE_PLUGIN_DATA}\" rgbds-language-server@0.1.4 2>/dev/null || true"
           }
         ]
       }
