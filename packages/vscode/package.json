@@ -2,7 +2,7 @@
   "name": "rgbds-lsp",
   "displayName": "RGBDS Assembly",
   "description": "Language support for RGBDS Game Boy assembly — go-to-definition, find references, completion, diagnostics, rename, syntax highlighting",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "publisher": "rgbds-lsp",
   "icon": "icon.png",

@@ -1,6 +1,6 @@
 {
   "name": "tree-sitter-rgbds",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Tree-sitter grammar for RGBDS Game Boy assembly",
   "license": "MIT",
   "keywords": ["tree-sitter", "rgbds", "gameboy", "assembly", "parser", "gbz80", "sm83"],

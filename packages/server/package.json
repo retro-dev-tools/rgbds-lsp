@@ -1,6 +1,6 @@
 {
   "name": "rgbds-language-server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Language server for RGBDS Game Boy assembly — definitions, references, completion, diagnostics, rename",
   "license": "MIT",
   "keywords": ["lsp", "language-server", "rgbds", "gameboy", "assembly", "gbz80"],

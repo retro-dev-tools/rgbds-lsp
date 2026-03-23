@@ -1,7 +1,7 @@
 {
   "name": "rgbds-lsp",
   "description": "RGBDS Game Boy assembly language server — go-to-definition, find references, completion, hover, diagnostics, rename, document outline",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": {
     "name": "rgbds-lsp contributors"
   },
