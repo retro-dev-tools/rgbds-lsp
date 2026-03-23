@@ -165,7 +165,7 @@ module.exports = grammar({
 
     // ─── Constants ────────────────────────────────────────────
 
-    _def_name: $ => choice($.identifier, $.interpolation, $.macro_label),
+    _def_name: $ => choice($.identifier, $.raw_identifier, $.interpolation, $.macro_label),
 
     _assignment_op: $ => choice(
       '=', '+=', '-=', '*=', '/=', '%=', '|=', '&=', '^=', '<<=', '>>=' , ci_kw('SET'),
@@ -210,7 +210,7 @@ module.exports = grammar({
 
     // ─── Export / Purge ───────────────────────────────────────
 
-    _symbol_name: $ => choice($.identifier, $.macro_label, $.macro_arg),
+    _symbol_name: $ => choice($.identifier, $.raw_identifier, $.macro_label, $.macro_arg),
     _symbol_list: $ => seq($._symbol_name, repeat(seq(',', $._symbol_name))),
 
     export_directive: $ => seq(choice(ci_kw('EXPORT'), ci_kw('GLOBAL')), $._symbol_list),
@@ -366,17 +366,24 @@ module.exports = grammar({
 
     _named_ref: $ => choice(
       $.identifier, $.scoped_identifier, $.local_identifier,
-      $.macro_label, $.equs_string_ref,
+      $.macro_label, $.equs_string_ref, $.raw_identifier,
     ),
 
     symbol_reference: $ => choice($._named_ref, '@', /:[+-]+/),
 
+    // # prefix: EQUS string expansion (#identifier), raw identifier (#keyword),
+    // or project-convention hex color (#F8F8A8, #00FF00) — all handled as
+    // string-like tokens, never as numbers.
     equs_string_ref: _ => choice(
       /#[a-zA-Z_][a-zA-Z0-9_]*((\{[^}\r\n]*\}|\\[1-9@])[a-zA-Z0-9_]*)*/,
+      /#[0-9a-fA-F]+/,       // #hex — treated as string token (e.g. rgb #F8F8A8)
       /#\{[^}\r\n]*\}/,
     ),
 
     // ─── Tokens ───────────────────────────────────────────────
+
+    // #keyword escapes reserved words as identifiers (RGBDS v1.0.1+)
+    raw_identifier: _ => /#[a-zA-Z_][a-zA-Z0-9_]*/,
 
     identifier: _ => /[a-zA-Z_][a-zA-Z0-9_#@]*((\{[^}\r\n]*\}|\\[1-9@])[a-zA-Z0-9_#@]*)*(\\@)?/,
 
@@ -386,7 +393,7 @@ module.exports = grammar({
     local_identifier: _ => /\.[a-zA-Z_][a-zA-Z0-9_]*((\{[^}\r\n]*\}|\\[1-9@])[a-zA-Z0-9_]*)*(\\@)?/,
 
     number: _ => choice(
-      /\$[0-9a-fA-F_]+/, /0[xX][0-9a-fA-F_]+/, /#[0-9a-fA-F_]+/,
+      /\$[0-9a-fA-F_]+/, /0[xX][0-9a-fA-F_]+/,
       /%[01_]+/, /%[.a-zA-Z0-9_]+/, /0[bB][01_]+/,
       /&[0-7_]+/, /0[oO][0-7_]+/,
       /[0-9]+\.[0-9]+[qQ][0-9]+/, /[0-9]+\.[0-9]+/, /[0-9][0-9_]*/,
@@ -397,7 +404,13 @@ module.exports = grammar({
     gfx_literal: _ => /`[^\s,;\r\n]+/,
 
     string: _ => choice(
+      // Raw triple-quoted (no escapes, no interpolation)
+      token(seq('#"""', /([^"]|"[^"]|""[^"])*/, '"""')),
+      // Normal triple-quoted
       token(seq('"""', /([^"]|"[^"]|""[^"])*/, '"""')),
+      // Raw single-quoted (no escapes, no interpolation)
+      seq('#"', repeat(/[^"\r\n]/), '"'),
+      // Normal single-quoted with escapes and interpolation
       seq('"', repeat(choice(/[^"\\\r\n{]/, /\\./, /\{[^}\r\n]*\}/)), '"'),
     ),
   },

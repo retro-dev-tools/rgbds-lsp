@@ -136,3 +136,58 @@ RL instruction still works
         (operand_list
           (operand
             (condition)))))))
+
+================================================================================
+Raw string literal
+================================================================================
+
+DEF x EQUS #"hello\nworld"
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (string)))))))
+
+================================================================================
+Raw identifier escaping keyword
+================================================================================
+
+DEF #if EQU 1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (raw_identifier)
+          (expression
+            (number)))))))
+
+================================================================================
+Hex color in macro argument
+================================================================================
+
+    rgb #F8F8A8
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (macro_invocation
+        (identifier)
+        (expression_list
+          (expression
+            (symbol_reference
+              (equs_string_ref))))))))
