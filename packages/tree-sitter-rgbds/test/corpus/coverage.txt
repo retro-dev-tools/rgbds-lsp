@@ -60,6 +60,40 @@ Block comment
         (mnemonic)))))
 
 ================================================================================
+Empty block comment
+================================================================================
+
+/**/ nop
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (block_comment)
+  (line
+    (statement
+      (instruction
+        (mnemonic)))))
+
+================================================================================
+Block comment with stars
+================================================================================
+
+/*** star ***/
+    nop
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (block_comment)
+  (line)
+  (line
+    (statement
+      (instruction
+        (mnemonic)))))
+
+================================================================================
 Anonymous label definition and reference
 ================================================================================
 
@@ -218,7 +252,8 @@ ASSERT BANK(@) == 0, "Must be in bank 0"
                       (symbol_reference)))))
               (expression
                 (number))))
-          (string))))))
+          (expression
+            (string)))))))
 
 ================================================================================
 PRINTLN directive
@@ -255,7 +290,8 @@ CHARMAP "A", $41
     (statement
       (directive
         (charmap_directive
-          (string)
+          (expression
+            (string))
           (expression_list
             (expression
               (number))))))))

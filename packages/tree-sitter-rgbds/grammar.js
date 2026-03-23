@@ -61,8 +61,8 @@ module.exports = grammar({
       $.macro_invocation,
     ),
 
-    // Fix #9: line continuation
-    line_continuation: _ => token(seq('\\', /\r?\n/)),
+    // Fix #9: line continuation (allow trailing whitespace before newline)
+    line_continuation: _ => token(seq('\\', /[ \t]*\r?\n/)),
 
     // ─── Comments ─────────────────────────────────────────────
 
@@ -81,17 +81,20 @@ module.exports = grammar({
     ),
 
     global_label: $ => seq(
-      field('name', choice($.identifier, $.scoped_identifier, $.macro_label)),
+      field('name', choice($.identifier, $.scoped_identifier, $.macro_label, $.interpolation)),
       choice('::', ':'),
     ),
 
-    // Labels that begin with macro arguments: \1Moves::, \1Special::
-    macro_label: _ => /\\[1-9#@][a-zA-Z0-9_]*/,
+    // Labels/identifiers with macro arguments: \1Moves::, \1Special::, TM_\1, \2_tiles
+    macro_label: _ => /\\([1-9#@]|<[0-9]+>)[a-zA-Z0-9_]*(\{[^}\r\n]*\}[a-zA-Z0-9_]*)*/,
 
+    // Colon-less form (.name without :) is valid RGBDS syntax and heavily used
+    // in real codebases (e.g. pokecrystal has hundreds of instances).
+    // Precedence ensures colon forms are preferred when ambiguous.
     local_label: $ => choice(
       prec(2, seq(field('name', $.local_identifier), '::')),
       prec(2, seq(field('name', $.local_identifier), ':')),
-      field('name', $.local_identifier),  // colon-less local label
+      field('name', $.local_identifier),
     ),
 
     anonymous_label: _ => token(prec(-1, ':')),
@@ -138,14 +141,18 @@ module.exports = grammar({
     // Fix #2: negated conditions (!z, !nz, !c, !nc)
     negated_condition: $ => seq('!', $.condition),
 
+    // SM83 legal forms: [hl], [bc], [de], [hl+]/[hli], [hl-]/[hld],
+    // [c] (ldh high mem), [n16]. The grammar accepts any register here
+    // for simplicity — semantic validation (rejecting e.g. [af]) is done
+    // by the LSP diagnostics, not the parser.
     memory_operand: $ => seq(
       '[',
       choice(
         seq($.register, '+'),     // [hl+]
         seq($.register, '-'),     // [hl-]
-        $.register,               // [hl], [bc], [de]
-        $.sp_register,            // [sp] (rare but valid)
-        $.expression,             // [$FF00+c], [$addr]
+        $.register,               // [hl], [bc], [de], [c]
+        $.sp_register,            // [sp]
+        $.expression,             // [$addr], [wMyVar]
       ),
       ']',
     ),
@@ -237,12 +244,16 @@ module.exports = grammar({
 
     // ─── Constants ────────────────────────────────────────────
 
+    _def_name: $ => choice($.identifier, $.interpolation, $.macro_label),
+
     constant_directive: $ => choice(
-      seq(ci_kw('DEF'), field('name', $.identifier), ci_kw('EQU'), $.expression),
-      seq(ci_kw('DEF'), field('name', $.identifier), ci_kw('EQUS'), $.expression),
-      seq(ci_kw('DEF'), field('name', $.identifier), choice('=', '+=', '-=', '*=', '/=', '%=', '|=', '&=', '^=', '<<=', '>>=', ci_kw('SET')), $.expression),
-      seq(ci_kw('DEF'), field('name', $.identifier), choice(ci_kw('RB'), ci_kw('RW'), ci_kw('RL')), optional($.expression)),
-      seq(ci_kw('REDEF'), field('name', $.identifier), ci_kw('EQUS'), $.expression),
+      seq(ci_kw('DEF'), field('name', $._def_name), ci_kw('EQU'), $.expression),
+      seq(ci_kw('DEF'), field('name', $._def_name), ci_kw('EQUS'), $.expression),
+      seq(ci_kw('DEF'), field('name', $._def_name), choice('=', '+=', '-=', '*=', '/=', '%=', '|=', '&=', '^=', '<<=', '>>=', ci_kw('SET')), $.expression),
+      seq(ci_kw('DEF'), field('name', $._def_name), choice(ci_kw('RB'), ci_kw('RW'), ci_kw('RL')), optional($.expression)),
+      seq(ci_kw('REDEF'), field('name', $._def_name), ci_kw('EQUS'), $.expression),
+      seq(ci_kw('REDEF'), field('name', $._def_name), ci_kw('EQU'), $.expression),
+      seq(ci_kw('REDEF'), field('name', $._def_name), choice('=', '+=', '-=', '*=', '/=', '%=', '|=', '&=', '^=', '<<=', '>>=', ci_kw('SET')), $.expression),
       // Legacy (no DEF prefix)
       seq(field('name', $.identifier), ci_kw('EQU'), $.expression),
       seq(field('name', $.identifier), ci_kw('EQUS'), $.expression),
@@ -264,14 +275,14 @@ module.exports = grammar({
 
     export_directive: $ => seq(
       choice(ci_kw('EXPORT'), ci_kw('GLOBAL')),
-      $.identifier,
-      repeat(seq(',', $.identifier)),
+      choice($.identifier, $.macro_label, $.macro_arg),
+      repeat(seq(',', choice($.identifier, $.macro_label, $.macro_arg))),
     ),
 
     purge_directive: $ => seq(
       ci_kw('PURGE'),
-      $.identifier,
-      repeat(seq(',', $.identifier)),
+      choice($.identifier, $.macro_label, $.macro_arg),
+      repeat(seq(',', choice($.identifier, $.macro_label, $.macro_arg))),
     ),
 
     // ─── Macro (flat boundary markers) ────────────────────────
@@ -284,15 +295,13 @@ module.exports = grammar({
 
     endm_directive: _ => ci_kw('ENDM'),
 
-    // Fix #12: macro_invocation at lowest precedence, only when nothing else matches
+    // Lowest precedence fallback: any identifier that didn't match a directive
+    // or instruction is treated as a macro invocation. This is inherently broad
+    // but matches RGBDS behavior where any identifier can be a user-defined macro.
     macro_invocation: $ => prec(-2, seq(
       field('name', $.identifier),
-      optional($.macro_arg_list),
+      optional($.expression_list),
     )),
-
-    // Macro arguments are less structured than expression_list —
-    // they can contain arbitrary text separated by commas
-    macro_arg_list: $ => $.expression_list,
 
     macro_arg: _ => choice(
       /\\[1-9#@]/,       // \1 through \9, \#, \@
@@ -310,11 +319,15 @@ module.exports = grammar({
 
     // ─── Loops (flat boundary markers) ────────────────────────
 
-    rept_directive: $ => seq(ci_kw('REPT'), $.expression),
+    rept_directive: $ => seq(
+      choice(token(prec(1, seq(ci('REPT'), '?'))), ci_kw('REPT')),
+      $.expression,
+    ),
 
     // FOR variable, start, stop[, step] OR FOR variable, count
+    // FOR? is the conditional form
     for_directive: $ => seq(
-      ci_kw('FOR'),
+      choice(token(prec(1, seq(ci('FOR'), '?'))), ci_kw('FOR')),
       field('variable', $.identifier),
       ',',
       $.expression,
@@ -348,7 +361,7 @@ module.exports = grammar({
 
     // ─── Charmap ──────────────────────────────────────────────
 
-    charmap_directive: $ => seq(ci_kw('CHARMAP'), $.string, ',', $.expression_list),
+    charmap_directive: $ => seq(ci_kw('CHARMAP'), $.expression, ',', $.expression_list),
 
     newcharmap_directive: $ => seq(
       ci_kw('NEWCHARMAP'),
@@ -358,7 +371,7 @@ module.exports = grammar({
 
     setcharmap_directive: $ => seq(ci_kw('SETCHARMAP'), $.identifier),
 
-    pushc_directive: _ => ci_kw('PUSHC'),
+    pushc_directive: $ => seq(ci_kw('PUSHC'), optional($.identifier)),
     popc_directive: _ => ci_kw('POPC'),
 
     // ─── Assertions / Output ──────────────────────────────────
@@ -366,7 +379,7 @@ module.exports = grammar({
     assert_directive: $ => seq(
       choice(ci_kw('ASSERT'), ci_kw('STATIC_ASSERT')),
       $.expression,
-      optional(seq(',', $.string)),
+      optional(seq(',', $.expression)),
     ),
 
     print_directive: $ => seq(
@@ -381,8 +394,8 @@ module.exports = grammar({
 
     opt_directive: $ => seq(ci_kw('OPT'), /[^\r\n;]+/),
 
-    pusho_directive: _ => ci_kw('PUSHO'),
-    popo_directive: _ => ci_kw('POPO'),
+    pusho_directive: $ => seq(ci_kw('PUSHO'), optional(/[^\r\n;]+/)),
+    popo_directive: $ => seq(ci_kw('POPO'), optional(/[^\r\n;]+/)),
     pushs_directive: _ => ci_kw('PUSHS'),
     pops_directive: _ => ci_kw('POPS'),
 
@@ -394,9 +407,11 @@ module.exports = grammar({
 
     // ─── Expressions ──────────────────────────────────────────
 
+    // Expression lists allow optional trailing comma
     expression_list: $ => seq(
       $.expression,
       repeat(seq(',', $.expression)),
+      optional(','),
     ),
 
     expression: $ => choice(
@@ -414,27 +429,61 @@ module.exports = grammar({
       $.macro_arg,
     ),
 
-    // EQUS inline expansion: handles juxtaposed tokens from EQUS string expansion
-    // e.g. "2 percent" where percent EQUS "* $ff / 100"
-    equs_expansion: $ => prec.left(-1, seq(
-      choice($.number, $.macro_arg, $.parenthesized_expression),
-      $.identifier,
+    // BEST-EFFORT HEURISTIC for EQUS text expansion.
+    //
+    // RGBDS EQUS macros expand as raw text before parsing, creating token
+    // sequences the grammar cannot predict. For example:
+    //   DEF percent EQUS "* $ff / 100"   →  "2 percent" becomes "2 * $ff / 100"
+    //   DEF tile EQUS "* $10"            →  "vTiles2 tile $31" becomes "vTiles2 * $10 $31"
+    //
+    // This rule recognizes common unexpanded patterns so the parser doesn't
+    // produce ERROR nodes for valid RGBDS code. It is intentionally broad
+    // and low-precedence. The LSP should not rely on the structure of
+    // equs_expansion nodes — they are parse-recovery, not semantic.
+    //
+    // Three forms, from most to least specific:
+    equs_expansion: $ => prec.left(-1, choice(
+      // Form 1: literal + EQUS identifier: "2 percent", "\2 tiles", "(7*7) tiles"
+      seq(
+        choice($.number, $.macro_arg, $.parenthesized_expression, $.macro_label),
+        $.identifier,
+        repeat(choice($.number, $.identifier, $.macro_arg, $.char_literal, $.parenthesized_expression)),
+      ),
+      // Form 2: EQUS identifier + literal: "time_group 10", "tile '0'", "palred 31"
+      seq(
+        $.identifier,
+        choice($.number, $.char_literal),
+        repeat(choice($.number, $.identifier, $.macro_arg, $.char_literal)),
+      ),
+      // Form 3: identifier chain with args: "vTiles2 tile $31", "palred 31 + palgreen 20"
+      // This is the broadest form and may over-accept in rare cases.
+      seq(
+        $.identifier,
+        $.identifier,
+        repeat1(choice($.number, $.identifier, $.macro_arg, $.char_literal, $.parenthesized_expression)),
+      ),
     )),
 
-    // Symbol interpolation: {identifier} or {format:identifier}
-    interpolation: $ => seq('{', repeat(/[^}]/), '}'),
+    // Symbol interpolation: {identifier}, {format:identifier}, {{nested}}
+    // Limitation: single-level regex, won't handle deeply nested {d:{expr}}.
+    // Would require an external scanner for full support — not worth the
+    // complexity given how rare deep nesting is in practice.
+    interpolation: _ => choice(
+      /\{[^}\r\n]*\}/,            // single brace
+      /\{\{[^}\r\n]*\}\}/,        // double brace {{...}}
+    ),
 
     binary_expression: $ => {
       /** @type {[string, number][]} */
       const ops = [
         ['||', 1],
         ['&&', 2],
-        ['==', 3], ['!=', 3], ['<', 3], ['>', 3], ['<=', 3], ['>=', 3],
-        ['+', 4], ['-', 4],
+        ['===', 3], ['!==', 3], ['==', 3], ['!=', 3], ['<', 3], ['>', 3], ['<=', 3], ['>=', 3],
+        ['++', 4], ['+', 4], ['-', 4],
         ['|', 5],
         ['^', 6],
         ['&', 7],
-        ['<<', 8], ['>>', 8], ['>>>', 8],
+        ['<<', 8], ['>>', 8],
         ['*', 9], ['/', 9], ['%', 9],
         ['**', 10],
       ];
@@ -474,27 +523,36 @@ module.exports = grammar({
     ),
 
     // #identifier expands an EQUS symbol as a string value
-    equs_string_ref: _ => /#[a-zA-Z_][a-zA-Z0-9_]*/,
+    // Can contain {interpolation} and \1-\9 macro args
+    equs_string_ref: _ => choice(
+      /#[a-zA-Z_][a-zA-Z0-9_]*((\{[^}\r\n]*\}|\\[1-9@])[a-zA-Z0-9_]*)*/,
+      /#\{[^}\r\n]*\}/,       // #{interpolation}
+    ),
 
     // ─── Tokens ───────────────────────────────────────────────
 
-    // Fix #5: RGBDS identifiers can start with [a-zA-Z_] and contain # @ in body
-    // \@ suffix allowed for macro-unique labels (e.g. myLabel\@)
-    // Note: $ is NOT valid in identifiers — it's the hex prefix
+    // RGBDS identifiers: start with [a-zA-Z_], contain # @ in body,
+    // can have \@ suffix and {expression} interpolation anywhere
+    // Note: $ is NOT valid — it's the hex prefix
     // Note: @ alone is the PC address symbol, not an identifier
-    identifier: _ => /[a-zA-Z_][a-zA-Z0-9_#@]*(\\@)?/,
+    // Identifiers may contain \1-\9 macro args and {expr} interpolation inline
+    identifier: _ => /[a-zA-Z_][a-zA-Z0-9_#@]*((\{[^}\r\n]*\}|\\[1-9@])[a-zA-Z0-9_#@]*)*(\\@)?/,
 
-    // Fix #6: scoped identifier with exactly one dot (Global.local)
-    scoped_identifier: _ => /[a-zA-Z_][a-zA-Z0-9_#@]*\.[a-zA-Z_][a-zA-Z0-9_#@]*(\\@)?/,
+    // Scoped identifier with exactly one dot (Global.local).
+    // RGBDS spec: "Label names cannot contain more than one period."
+    scoped_identifier: _ => /[a-zA-Z_][a-zA-Z0-9_#@]*(\{[^}\r\n]*\}[a-zA-Z0-9_#@]*)*\.[a-zA-Z_][a-zA-Z0-9_#@]*(\{[^}\r\n]*\}[a-zA-Z0-9_#@]*)*(\\@)?/,
 
-    local_identifier: _ => /\.[a-zA-Z_][a-zA-Z0-9_]*/,
+    // Local labels can also have \@ suffix, {expr} interpolation, and \1-\9 args
+    local_identifier: _ => /\.[a-zA-Z_][a-zA-Z0-9_]*((\{[^}\r\n]*\}|\\[1-9@])[a-zA-Z0-9_]*)*(\\@)?/,
 
     // Fix #10: number literals including fixed-point
     // RGBDS allows _ as visual separator in numeric literals
     number: _ => choice(
       /\$[0-9a-fA-F_]+/,           // hex: $FF, $FF_00
       /0[xX][0-9a-fA-F_]+/,        // hex: 0xFF
+      /#[0-9a-fA-F_]+/,            // hex color: #F8F8A8
       /%[01_]+/,                    // binary: %1010, %00_11_0000
+      /%[.a-zA-Z0-9_]+/,           // EQUS-expanded binary: %..XXXX.. (custom chars via opt)
       /0[bB][01_]+/,               // binary: 0b1010
       /&[0-7_]+/,                   // octal: &77
       /0[oO][0-7_]+/,              // octal: 0o77
@@ -503,13 +561,24 @@ module.exports = grammar({
       /[0-9][0-9_]*/,              // decimal: 100, 1_000
     ),
 
-    char_literal: _ => seq("'", /[^'\r\n]/, "'"),
+    // Char literals: 'x', '<CHARMAP_NAME>', '\r', '\n', '\'s', unicode chars
+    char_literal: _ => choice(
+      /'<[^>\r\n]*>'/,         // charmap: '<BOLD_V>', '<MOBILE>' (must come first)
+      /'\\.[^']*'/,            // escape sequences: '\r', '\n', '\'s'
+      /'[^'\\\r\n]+'/,         // simple and unicode: 'A', '■', '☎'
+    ),
 
     // Fix #10: backtick graphics literal
     // Characters are configurable via `opt g`, default 0123 but can be any 4 chars
     gfx_literal: _ => /`[^\s,;\r\n]+/,
 
-    string: _ => seq('"', repeat(choice(/[^"\\\r\n]/, /\\./)), '"'),
+    // Strings: double-quoted and triple-quoted
+    string: _ => choice(
+      // Triple-quoted strings (can span lines, contain quotes)
+      token(seq('"""', /([^"]|"[^"]|""[^"])*/, '"""')),
+      // Double-quoted strings with escapes and interpolation
+      seq('"', repeat(choice(/[^"\\\r\n{]/, /\\./, /\{[^}\r\n]*\}/)), '"'),
+    ),
   },
 });
 

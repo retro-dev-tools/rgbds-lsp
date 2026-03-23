@@ -110,7 +110,8 @@ Numeric macro arg with angle brackets
         (data_directive
           (expression_list
             (expression
-              (macro_arg))
+              (symbol_reference
+                (macro_label)))
             (expression
               (number))))))))
 
@@ -128,13 +129,12 @@ STRLEN(#MY_STRING)
     (statement
       (macro_invocation
         (identifier)
-        (macro_arg_list
-          (expression_list
-            (expression
-              (parenthesized_expression
-                (expression
-                  (symbol_reference
-                    (equs_string_ref)))))))))))
+        (expression_list
+          (expression
+            (parenthesized_expression
+              (expression
+                (symbol_reference
+                  (equs_string_ref))))))))))
 
 ================================================================================
 Number EQUS expansion (percent pattern)
