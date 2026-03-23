@@ -91,7 +91,6 @@ export class Indexer {
         const files = collectRgbdsFiles(rootDir);
         let indexed = 0;
         let failed = 0;
-        const BATCH_SIZE = 20;
 
         for (let i = 0; i < files.length; i++) {
             try {
@@ -107,10 +106,8 @@ export class Indexer {
                 failed++;
             }
 
-            // Yield to the event loop every BATCH_SIZE files
-            if ((i + 1) % BATCH_SIZE === 0) {
-                await new Promise(resolve => setImmediate(resolve));
-            }
+            // Yield to the event loop after every file so LSP requests can be served
+            await new Promise(resolve => setImmediate(resolve));
         }
 
         return { indexed, failed };
