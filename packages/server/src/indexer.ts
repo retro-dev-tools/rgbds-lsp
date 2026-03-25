@@ -6,7 +6,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 
 // Load tree-sitter-rgbds grammar
-const rgbdsLanguage = require('@minorum/tree-sitter-rgbds');
+const rgbdsLanguage = require('@retro-dev/tree-sitter-rgbds');
 
 const CACHE_VERSION = 2;
 const CACHE_DIR = path.join(require('os').homedir(), '.rgbds-lsp', 'cache');

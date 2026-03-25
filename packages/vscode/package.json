@@ -12,12 +12,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/minorum/rgbds-lsp"
+    "url": "https://github.com/retro-dev-tools/rgbds-lsp"
   },
   "bugs": {
-    "url": "https://github.com/minorum/rgbds-lsp/issues"
+    "url": "https://github.com/retro-dev-tools/rgbds-lsp/issues"
   },
-  "homepage": "https://github.com/minorum/rgbds-lsp#readme",
+  "homepage": "https://github.com/retro-dev-tools/rgbds-lsp#readme",
   "keywords": [
     "rgbds",
     "gameboy",

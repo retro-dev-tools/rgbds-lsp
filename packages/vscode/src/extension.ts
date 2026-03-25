@@ -122,7 +122,7 @@ async function findServer(): Promise<string | null> {
 
     try {
         const { stdout } = await execAsync('npm root -g', { timeout: 5000 });
-        return require.resolve('@minorum/rgbds-language-server', { paths: [stdout.trim()] });
+        return require.resolve('@retro-dev/rgbds-language-server', { paths: [stdout.trim()] });
     } catch {}
 
     return null;
@@ -312,12 +312,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
     if (!serverModule) {
         vscode.window.showErrorMessage(
-            'RGBDS language server not found. Install it with: npm install -g @minorum/rgbds-language-server',
+            'RGBDS language server not found. Install it with: npm install -g @retro-dev/rgbds-language-server',
             'Install now',
         ).then(choice => {
             if (choice === 'Install now') {
                 const terminal = vscode.window.createTerminal('RGBDS LSP Install');
-                terminal.sendText('npm install -g @minorum/rgbds-language-server');
+                terminal.sendText('npm install -g @retro-dev/rgbds-language-server');
                 terminal.show();
             }
         });

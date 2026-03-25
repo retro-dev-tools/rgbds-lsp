@@ -1,5 +1,5 @@
 {
-  "name": "@minorum/rgbds-language-server",
+  "name": "@retro-dev/rgbds-language-server",
   "version": "0.2.0",
   "description": "Language server for RGBDS Game Boy assembly — definitions, references, completion, diagnostics, rename",
   "license": "MIT",
@@ -23,7 +23,7 @@
     "vscode-languageserver": "^9.0.1",
     "vscode-languageserver-textdocument": "^1.0.12",
     "tree-sitter": "^0.25.0",
-    "@minorum/tree-sitter-rgbds": "^0.1.4"
+    "@retro-dev/tree-sitter-rgbds": "^0.1.4"
   },
   "devDependencies": {
     "vitest": "^4.0.18"

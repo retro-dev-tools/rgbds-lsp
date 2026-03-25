@@ -5,7 +5,7 @@
   "author": {
     "name": "rgbds-lsp contributors"
   },
-  "repository": "https://github.com/minorum/rgbds-lsp",
+  "repository": "https://github.com/retro-dev-tools/rgbds-lsp",
   "license": "MIT",
   "keywords": ["gameboy", "rgbds", "assembly", "gbz80", "lsp"],
   "hooks": {
@@ -14,7 +14,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npm install --prefix \"${CLAUDE_PLUGIN_DATA}\" @minorum/rgbds-language-server@0.1.4 2>/dev/null || true"
+            "command": "npm install --prefix \"${CLAUDE_PLUGIN_DATA}\" @retro-dev/rgbds-language-server@0.1.4 2>/dev/null || true"
           }
         ]
       }

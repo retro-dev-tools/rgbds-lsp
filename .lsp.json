@@ -1,7 +1,7 @@
 {
   "rgbds": {
     "command": "node",
-    "args": ["${CLAUDE_PLUGIN_DATA}/node_modules/@minorum/rgbds-language-server/dist/index.js", "--stdio"],
+    "args": ["${CLAUDE_PLUGIN_DATA}/node_modules/@retro-dev/rgbds-language-server/dist/index.js", "--stdio"],
     "extensionToLanguage": {
       ".asm": "asm",
       ".inc": "asm"

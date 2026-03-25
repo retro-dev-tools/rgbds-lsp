@@ -4,77 +4,45 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-RGBDS-LSP is a Language Server Protocol implementation for RGBDS (Rednex Game Boy Development System) assembly. It provides IDE features for `.asm` and `.inc` files targeting the GBZ80/SM83 CPU. Monorepo with three packages: a Tree-sitter grammar, an LSP server, and a VS Code extension.
+RGBDS-LSP is a Language Server Protocol implementation for RGBDS (Game Boy assembly). Monorepo: Tree-sitter grammar, LSP server, VS Code extension.
 
 ## Build Commands
 
 ```bash
-# Install dependencies and build everything (grammar must generate before native build)
-npm install && npm run build
+npm install && npm run build          # Install and build everything
+npm run clean                         # Clean all build artifacts
 
-# Clean all build artifacts
-npm run clean
+cd packages/tree-sitter-rgbds && npx tree-sitter generate  # Regenerate parser after grammar.js changes
+cd packages/tree-sitter-rgbds && npx tree-sitter test      # Grammar corpus tests
 
-# Grammar tests (tree-sitter corpus tests)
-cd packages/tree-sitter-rgbds && npx tree-sitter test
+cd packages/server && npm run build   # Build server (required before integration tests)
+cd packages/server && npm test        # Unit + integration tests (vitest)
+cd packages/server && npx vitest run tests/unit.test.ts     # Single test file
 
-# Server tests (vitest)
-cd packages/server && npm test
-
-# Regenerate parser from grammar.js (required after grammar changes)
-cd packages/tree-sitter-rgbds && npx tree-sitter generate
+cd packages/vscode && npm run build   # Build extension
 ```
 
-**Critical build order**: `tree-sitter generate` must run before `npm install` because the native addon build (node-gyp) depends on the generated `src/parser.c`. The root build script handles this, but be aware when working manually.
+**Critical**: `tree-sitter generate` must run before `npm install` — the native addon build depends on `src/parser.c`. The root build script handles this.
+
+**Integration tests** spawn `dist/index.js` as a subprocess — build the server first.
 
 ## Architecture
 
 ```
-VS Code Extension  ──►  LSP Server  ──►  Tree-sitter Parser
-(packages/vscode)    (packages/server)  (packages/tree-sitter-rgbds)
+VS Code Extension (IPC client)  →  LSP Server (tree-sitter)  →  Tree-sitter Parser
+packages/vscode                    packages/server               packages/tree-sitter-rgbds
 ```
 
-### tree-sitter-rgbds (`packages/tree-sitter-rgbds/`)
-- `grammar.js` defines the complete RGBDS assembly grammar (case-insensitive keywords, local label scoping, macro parameters)
-- Generates `src/parser.c` (C parser) compiled to a native Node.js addon
-- Test corpus in `test/corpus/*.txt` — add tests here when modifying grammar rules
-
-### server (`packages/server/src/`)
-- `server.ts` — LSP connection setup and all protocol handlers (definition, references, hover, completion, rename, diagnostics, document symbols, inlay hints)
-- `indexer.ts` — Core engine: parses files with tree-sitter, walks ASTs to extract symbol definitions and references. Maintains two maps: `definitions` and `references`. Handles local label scoping by prefixing `.local` names with their parent global label
-- `instruction-matcher.ts` — Matches AST instruction nodes to SM83 instruction forms (shared by hover and inlay hints)
-- `rom-reader.ts` — Reads ROM binary and `.sym` files for inlay hints. Parses sym format, computes bank:address → ROM offset mapping
-- `inlay-hints.ts` — Computes inlay hints by walking AST with ROM data anchored at label addresses
-- `types.ts` — Shared interfaces (`SymbolDef`, `SymbolRef`)
-- `utils.ts` — File path utilities
-
-### vscode (`packages/vscode/`)
-- Thin client that launches the server via IPC
-- TextMate grammar in `syntaxes/rgbds.tmLanguage.json` for syntax highlighting
-- Makefile auto-detection for build configuration
-- Language status bar item for build settings
-
-## Key Design Details
-
-- **Local label scoping**: Labels starting with `.` are stored as `GlobalLabel.local` in the index. The indexer tracks `currentGlobal` state while scanning each file to resolve scope.
-- **Symbol types**: `label`, `constant` (EQU/EQUS/SET), `macro`, `section`
-- **Incremental indexing**: On file change, only the changed file is re-indexed (`indexFile`). Full project scan happens at startup (`indexProject`).
-- **Diagnostics**: Warns on undefined symbol references. Max 200 per file.
-- **Indexer cache**: Stored in `~/.rgbds-lsp/cache/` keyed by workspace path hash. Clear cache after changing symbol extraction logic.
-- **Inlay hints (experimental)**: Shows assembled hex bytes next to source lines. Requires a built ROM (`.gb`/`.gbc`) and symbol file (`.sym`). The server reads actual bytes from the ROM, using labels from the sym file as anchor points to map source lines to ROM offsets.
-- **Makefile convention**: The extension auto-detects build config from Makefiles. Standard variables: `ROM` (output ROM path), `SYM` (output symbol file path). Standard targets: `all` (build), `clean`. The extension sets `rgbds.buildCommand`, `rgbds.romPath`, `rgbds.symPath` from these if not already configured.
+- **Assembled bytes** are text decorations via custom `rgbds/assembledBytes` RPC — NOT inlay hints. The extension manages rendering.
+- **Inlay hints** show constant values (`= $FF40`) and macro parameter labels (`\1:`). These are separate from assembled bytes.
+- **Local labels** starting with `.` are stored as `GlobalLabel.local` in the index.
+- **Symbol types**: `label`, `constant`, `macro`, `section`, `charmap`
+- **Per-file reverse index**: `fileDefinitions`/`fileReferences` maps enable O(1) lookups. `allDefinitions` tracks all defs per name for duplicate detection.
+- **Charmap state**: `extractAllCharmaps` is the single source of truth — runs after initial indexing and each reindex.
+- **Indexer cache**: `~/.rgbds-lsp/cache/` keyed by workspace path hash. Clear after changing symbol extraction logic.
 
 ## Versioning
 
-Each package is versioned independently — only bump packages that actually changed:
-- `packages/tree-sitter-rgbds` — bump only when `grammar.js` or parser output changes
-- `packages/server` — bump for server features, indexer changes, protocol additions
-- `packages/vscode` — bump for extension UI changes, new settings, or problem matchers (also bump when server changes require a new extension build)
+Each package versioned independently. Server and extension versions stay in sync. Tree-sitter version is independent.
 
-The server and extension versions should stay in sync since the extension bundles/depends on the server. The tree-sitter grammar version is independent.
-
-Version locations per package:
-- `packages/server/package.json`
-- `packages/vscode/package.json`
-- `packages/tree-sitter-rgbds/package.json` + `tree-sitter.json`
-- `.claude-plugin/plugin.json` — tracks the overall project, bump with the higher of server/extension
+Version locations: `packages/*/package.json`, `packages/tree-sitter-rgbds/tree-sitter.json`, `.claude-plugin/plugin.json` (bump with higher of server/extension).
