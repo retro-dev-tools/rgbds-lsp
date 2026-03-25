@@ -32,9 +32,6 @@ import {
     CodeActionParams,
     FileChangeType,
     ResponseError,
-    InlayHint,
-    InlayHintKind,
-    InlayHintParams,
     SignatureHelpParams,
 } from 'vscode-languageserver/node';
 
@@ -106,7 +103,6 @@ connection.onInitialize((params: InitializeParams) => {
                 range: true,
             },
             codeActionProvider: true,
-            inlayHintProvider: true,
         },
     };
 
@@ -666,41 +662,6 @@ connection.onRequest('rgbds/assembledBytes', (params: { uri: string; startLine: 
         },
     );
     return { lines: entries };
-});
-
-// ─── Inlay Hints ─────────────────────────────────────────────
-
-connection.languages.inlayHint.on((params: InlayHintParams): InlayHint[] => {
-    if (!assembledBytesSettings.enabled) return [];
-    const doc = documents.get(params.textDocument.uri);
-    if (!doc) return [];
-
-    const tree = rgbdsIndexer.getOrParseTree(doc.uri);
-    if (!tree) return [];
-
-    const entries = getAssembledBytesData(
-        tree,
-        doc.uri,
-        params.range.start.line,
-        params.range.end.line,
-        assembledBytesSettings,
-        rgbdsIndexer.definitions,
-        (u) => rgbdsIndexer.getOrParseTree(u),
-        (str, line) => {
-            const charmap = rgbdsIndexer.getActiveCharmap(doc.uri, line);
-            return charmap ? rgbdsIndexer.encodeStringBytes(charmap, str) : null;
-        },
-    );
-
-    return entries
-        .map((entry): InlayHint => ({
-            position: { line: entry.line, character: Number.MAX_SAFE_INTEGER },
-            label: '  ' + entry.short,
-            kind: InlayHintKind.Parameter as InlayHintKind,
-            paddingLeft: true,
-            tooltip: entry.full !== entry.short ? entry.full : undefined,
-        }))
-        .filter(h => (h.label as string).trim().length > 0);
 });
 
 // ─── Workspace Folder Changes ─────────────────────────────────
