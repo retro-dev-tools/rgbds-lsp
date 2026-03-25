@@ -180,29 +180,6 @@ export class Indexer {
         this.extractSymbols(uri, tree);
     }
 
-    public indexProject(rootDir: string): { indexed: number; failed: number } {
-        const files = collectRgbdsFiles(rootDir);
-        let indexed = 0;
-        let failed = 0;
-
-        for (const filePath of files) {
-            try {
-                const content = fs.readFileSync(filePath, 'utf-8');
-                const uri = pathToUri(filePath);
-                const tree = this.parser.parse(content);
-                this.trees.set(uri, tree);
-                this.fileContents.set(uri, content);
-                this.indexedFileUris.add(uri);
-                indexed++;
-            } catch {
-                failed++;
-            }
-        }
-
-        this.rebuildIndex();
-        return { indexed, failed };
-    }
-
     public async indexProjectAsync(rootDir: string): Promise<{ indexed: number; failed: number }> {
         const t0 = Date.now();
         const files = collectRgbdsFiles(rootDir);
