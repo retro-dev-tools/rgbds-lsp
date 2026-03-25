@@ -60,15 +60,19 @@ const DIRECTIVE_TYPES = new Set([
     'rb_directive', 'rw_directive',
 ]);
 
-export function computeSemanticTokens(tree: Parser.Tree, uri: string, indexer: Indexer): SemanticTokensBuilder {
+export function computeSemanticTokens(
+    tree: Parser.Tree,
+    uri: string,
+    indexer: Indexer,
+    range?: { start: { line: number }; end: { line: number } },
+): SemanticTokensBuilder {
     const builder = new SemanticTokensBuilder();
     let currentGlobal = '';
 
     for (const lineNode of tree.rootNode.children) {
         if (lineNode.type !== 'line' && lineNode.type !== 'final_line') continue;
-        walkNode(lineNode, builder, indexer, uri, { currentGlobal });
 
-        // Track current global label for local label scoping
+        // Always track global label state for correct local label scoping
         for (const child of lineNode.namedChildren) {
             if (child.type === 'label_definition') {
                 const labelNode = child.firstChild;
@@ -78,6 +82,14 @@ export function computeSemanticTokens(tree: Parser.Tree, uri: string, indexer: I
                 }
             }
         }
+
+        // Skip lines outside the requested range (but still tracked global above)
+        if (range) {
+            const lineRow = lineNode.startPosition.row;
+            if (lineRow > range.end.line || lineNode.endPosition.row < range.start.line) continue;
+        }
+
+        walkNode(lineNode, builder, indexer, uri, { currentGlobal });
     }
 
     return builder;

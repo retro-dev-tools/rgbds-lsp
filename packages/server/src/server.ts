@@ -98,6 +98,7 @@ connection.onInitialize((params: InitializeParams) => {
             semanticTokensProvider: {
                 legend: SEMANTIC_TOKENS_LEGEND,
                 full: true,
+                range: true,
             },
             codeActionProvider: true,
             inlayHintProvider: true,
@@ -624,6 +625,13 @@ connection.onRequest(SemanticTokensRequest.type, (params: SemanticTokensParams):
     const tree = rgbdsIndexer.getTree(params.textDocument.uri);
     if (!tree) return { data: [] };
     const builder = computeSemanticTokens(tree, params.textDocument.uri, rgbdsIndexer);
+    return builder.build();
+});
+
+connection.onRequest('textDocument/semanticTokens/range', (params: { textDocument: { uri: string }; range: Range }): SemanticTokens => {
+    const tree = rgbdsIndexer.getTree(params.textDocument.uri);
+    if (!tree) return { data: [] };
+    const builder = computeSemanticTokens(tree, params.textDocument.uri, rgbdsIndexer, params.range);
     return builder.build();
 });
 
