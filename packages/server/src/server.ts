@@ -27,9 +27,11 @@ import {
     FoldingRangeParams,
     SemanticTokensParams,
     SemanticTokens,
+    SemanticTokensRequest,
     CodeAction,
     CodeActionParams,
     FileChangeType,
+    ResponseError,
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -454,6 +456,7 @@ connection.onDocumentSymbol((params: DocumentSymbolParams): DocumentSymbol[] => 
         else if (def.type === 'constant') kind = SymbolKind.Constant;
         else if (def.type === 'macro') kind = SymbolKind.Method;
         else if (def.type === 'section') kind = SymbolKind.Namespace;
+        else if (def.type === 'charmap') kind = SymbolKind.Enum;
 
         const range = Range.create(def.line, def.col, def.line, def.endCol);
         const docSymbol: DocumentSymbol = {
@@ -491,6 +494,7 @@ connection.onWorkspaceSymbol((params): SymbolInformation[] => {
         else if (def.type === 'constant') kind = SymbolKind.Constant;
         else if (def.type === 'macro') kind = SymbolKind.Method;
         else if (def.type === 'section') kind = SymbolKind.Namespace;
+        else if (def.type === 'charmap') kind = SymbolKind.Enum;
 
         results.push({
             name,
@@ -612,7 +616,7 @@ connection.onFoldingRanges((params: FoldingRangeParams): FoldingRange[] => {
 
 // ─── Semantic Tokens ─────────────────────────────────────────
 
-connection.onRequest('textDocument/semanticTokens/full', (params: SemanticTokensParams): SemanticTokens => {
+connection.onRequest(SemanticTokensRequest.type, (params: SemanticTokensParams): SemanticTokens => {
     const tree = rgbdsIndexer.getTree(params.textDocument.uri);
     if (!tree) return { data: [] };
     const builder = computeSemanticTokens(tree, params.textDocument.uri, rgbdsIndexer);
@@ -684,7 +688,7 @@ connection.onRenameRequest((params: RenameParams): WorkspaceEdit | null => {
 
     // Validate new name
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(params.newName) && !/^\.[a-zA-Z_][a-zA-Z0-9_]*$/.test(params.newName)) {
-        return null;
+        throw new ResponseError(-32602, `Invalid RGBDS identifier: "${params.newName}"`);
     }
 
     const def = rgbdsIndexer.definitions.get(symbol);

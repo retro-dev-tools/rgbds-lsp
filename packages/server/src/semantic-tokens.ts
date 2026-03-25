@@ -162,7 +162,7 @@ function classifyNode(
             const def = indexer.definitions.get(name);
             if (!def) return null; // Unresolved — fall back to TextMate
 
-            if (def.type === 'constant') {
+            if (def.type === 'constant' || def.type === 'charmap') {
                 const isDef = isDefinitionSite(node);
                 return {
                     line: pos.row, col: pos.column, length: len,

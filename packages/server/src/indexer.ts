@@ -706,7 +706,7 @@ export class Indexer {
             if (nameNode) {
                 this.definitions.set(nameNode.text, {
                     name: nameNode.text,
-                    type: 'constant',
+                    type: 'charmap',
                     file: uri,
                     line: nameNode.startPosition.row,
                     col: nameNode.startPosition.column,
