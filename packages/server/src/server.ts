@@ -855,49 +855,112 @@ function getStringHover(uri: string, stringNode: Parser.SyntaxNode, line: number
 }
 
 function getSymbolAtPosition(doc: TextDocument, position: { line: number; character: number }): string | null {
-    const text = doc.getText();
-    const lines = text.split(/\r?\n/);
-    const lineText = lines[position.line];
-    if (!lineText) return null;
+    const tree = rgbdsIndexer.getOrParseTree(doc.uri);
+    if (!tree) return null;
 
-    const wordRegex = /[a-zA-Z0-9_.]/;
-    let start = position.character;
-    let end = position.character;
+    const node = getNodeAtPosition(tree, position.line, position.character);
+    if (!node) return null;
 
-    while (start > 0 && wordRegex.test(lineText[start - 1])) start--;
-    while (end < lineText.length && wordRegex.test(lineText[end])) end++;
-
-    if (start === end) return null;
-    let word = lineText.substring(start, end);
-
-    // If it's a local label reference (.something), scope it
-    if (word.startsWith('.')) {
-        let currentGlobal = '';
-        for (let i = 0; i <= position.line; i++) {
-            const m = lines[i].match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*::?/);
-            if (m) currentGlobal = m[1];
+    // Walk up to find an identifier-like node inside a symbol_reference
+    let current: Parser.SyntaxNode | null = node;
+    while (current) {
+        if (
+            current.type === 'identifier' ||
+            current.type === 'scoped_identifier' ||
+            current.type === 'local_identifier'
+        ) {
+            break;
         }
-        if (currentGlobal) word = currentGlobal + word;
+        if (current.type === 'symbol_reference') {
+            // Use the first named child
+            current = current.firstNamedChild ?? current;
+            break;
+        }
+        if (current.type === 'line' || current.type === 'final_line' || current.type === 'source_file') return null;
+        current = current.parent;
+    }
+    if (!current) return null;
+
+    // scoped_identifier already has the full "Global.local" text
+    if (current.type === 'scoped_identifier') {
+        return current.text;
+    }
+
+    let word = current.text;
+
+    // For a bare local_identifier (.local), scope it using the enclosing global label
+    if (word.startsWith('.')) {
+        const globalLabel = findEnclosingGlobalLabel(tree, position.line);
+        if (globalLabel) word = globalLabel + word;
     }
 
     return word;
 }
 
+/**
+ * Walk the source_file's named children (lines) backwards from the given line
+ * to find the most recent global label definition.
+ */
+function findEnclosingGlobalLabel(tree: Parser.Tree, line: number): string | null {
+    const root = tree.rootNode;
+    // Find the line node at or before the given line
+    let lineNode: Parser.SyntaxNode | null = null;
+    for (const child of root.namedChildren) {
+        if (child.startPosition.row <= line) {
+            lineNode = child;
+        } else {
+            break;
+        }
+    }
+
+    // Walk backward through line nodes to find a global_label
+    let current: Parser.SyntaxNode | null = lineNode;
+    while (current) {
+        // Look for label_definition > global_label in this line
+        for (const child of current.namedChildren) {
+            if (child.type === 'label_definition') {
+                for (const labelChild of child.namedChildren) {
+                    if (labelChild.type === 'global_label') {
+                        const nameNode = labelChild.childForFieldName('name');
+                        if (nameNode) return nameNode.text;
+                    }
+                }
+            }
+        }
+        current = current.previousNamedSibling;
+    }
+    return null;
+}
+
 function getWordRangeAtPosition(doc: TextDocument, position: { line: number; character: number }): Range | null {
-    const text = doc.getText();
-    const lines = text.split(/\r?\n/);
-    const lineText = lines[position.line];
-    if (!lineText) return null;
+    const tree = rgbdsIndexer.getOrParseTree(doc.uri);
+    if (!tree) return null;
 
-    const wordRegex = /[a-zA-Z0-9_.]/;
-    let start = position.character;
-    let end = position.character;
+    const node = getNodeAtPosition(tree, position.line, position.character);
+    if (!node) return null;
 
-    while (start > 0 && wordRegex.test(lineText[start - 1])) start--;
-    while (end < lineText.length && wordRegex.test(lineText[end])) end++;
+    let current: Parser.SyntaxNode | null = node;
+    while (current) {
+        if (
+            current.type === 'identifier' ||
+            current.type === 'scoped_identifier' ||
+            current.type === 'local_identifier'
+        ) {
+            break;
+        }
+        if (current.type === 'symbol_reference') {
+            current = current.firstNamedChild ?? current;
+            break;
+        }
+        if (current.type === 'line' || current.type === 'final_line' || current.type === 'source_file') return null;
+        current = current.parent;
+    }
+    if (!current) return null;
 
-    if (start === end) return null;
-    return Range.create(position.line, start, position.line, end);
+    return Range.create(
+        current.startPosition.row, current.startPosition.column,
+        current.endPosition.row, current.endPosition.column,
+    );
 }
 
 
