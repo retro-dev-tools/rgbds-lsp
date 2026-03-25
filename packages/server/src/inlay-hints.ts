@@ -314,6 +314,134 @@ function collectMacroBody(tree: Parser.Tree, macroDefLine: number): string[] | n
 
 const MAX_ITERATIONS = 100; // Safety limit
 
+interface MacroEmitter {
+    emit(bytes: number[]): void;
+    onShift(): void;
+}
+
+/**
+ * Core macro body interpreter. Shared logic for both flat and grouped execution.
+ * The emitter interface abstracts how emitted bytes and SHIFT events are handled.
+ */
+function executeMacroBodyCore(
+    bodyLines: string[],
+    args: string[],
+    definitions: Map<string, SymbolDef>,
+    encodeString: ((str: string, line: number) => number[] | null) | undefined,
+    sourceLine: number | undefined,
+    emitter: MacroEmitter,
+): void {
+    const vars = new Map<string, number>();
+    let iterations = 0;
+
+    function resolveValue(text: string): number | null {
+        const trimmed = text.trim();
+        const varVal = vars.get(trimmed);
+        if (varVal !== undefined) return varVal;
+        const num = tryParseNumber(trimmed);
+        if (num !== null) return num;
+        return resolveConstant(trimmed, definitions);
+    }
+
+    function substituteArgs(text: string): string {
+        return text
+            .replace(/\\#/g, args.join(', '))  // \# = all args joined
+            .replace(/\\([1-9])/g, (_, n) => args[parseInt(n) - 1] || '');
+    }
+
+    function evalSimpleExpr(expr: string): number | null {
+        return evalExpr(expr, args, resolveValue);
+    }
+
+    function processLines(lines: string[]): void {
+        let i = 0;
+        while (i < lines.length) {
+            if (++iterations > MAX_ITERATIONS) return;
+
+            let line = substituteArgs(lines[i]);
+            const upper = line.replace(/;.*$/, '').trim().toUpperCase();
+
+            // SHIFT
+            if (/^SHIFT\b/i.test(upper)) {
+                args.shift();
+                emitter.onShift();
+                i++;
+                continue;
+            }
+
+            // DEF / REDEF var = expr
+            const defMatch = line.match(/^(?:RE)?DEF\s+(\w+)\s*=\s*(.+)$/i);
+            if (defMatch) {
+                const val = evalSimpleExpr(defMatch[2].replace(/;.*$/, '').trim());
+                if (val !== null) vars.set(defMatch[1], val);
+                i++;
+                continue;
+            }
+
+            // REPT expr ... ENDR
+            if (/^REPT\b/i.test(upper)) {
+                const reptMatch = line.match(/^REPT\s+(.+)$/i);
+                const count = reptMatch ? evalSimpleExpr(reptMatch[1].replace(/;.*$/, '').trim()) : 0;
+                const reptBody: string[] = [];
+                let depth = 1;
+                i++;
+                while (i < lines.length && depth > 0) {
+                    const innerUpper = lines[i].replace(/;.*$/, '').trim().toUpperCase();
+                    if (/^REPT\b/.test(innerUpper) || /^FOR\b/.test(innerUpper)) depth++;
+                    if (/^ENDR\b/.test(innerUpper)) { depth--; if (depth === 0) break; }
+                    reptBody.push(lines[i]);
+                    i++;
+                }
+                i++; // skip ENDR
+                if (count !== null && count > 0 && count <= 32) {
+                    for (let r = 0; r < count; r++) {
+                        processLines(reptBody);
+                    }
+                }
+                continue;
+            }
+
+            // IF expr ... ELSE ... ENDC
+            if (/^IF\b/i.test(upper)) {
+                const ifMatch = line.match(/^IF\s+(.+)$/i);
+                const cond = ifMatch ? evalSimpleExpr(ifMatch[1].replace(/;.*$/, '').trim()) : 0;
+                const ifBody: string[] = [];
+                const elseBody: string[] = [];
+                let inElse = false;
+                let depth = 1;
+                i++;
+                while (i < lines.length && depth > 0) {
+                    const innerUpper = lines[i].replace(/;.*$/, '').trim().toUpperCase();
+                    if (/^IF\b/.test(innerUpper)) depth++;
+                    if (/^ENDC\b/.test(innerUpper)) { depth--; if (depth === 0) break; }
+                    if (/^ELSE\b/.test(innerUpper) && depth === 1) { inElse = true; i++; continue; }
+                    (inElse ? elseBody : ifBody).push(lines[i]);
+                    i++;
+                }
+                i++; // skip ENDC
+                processLines(cond ? ifBody : elseBody);
+                continue;
+            }
+
+            // db/dw directive — emit bytes
+            const dbMatch = line.match(/^(db|dw)\s+(.+)$/i);
+            if (dbMatch) {
+                const kw = dbMatch[1].toLowerCase();
+                const valuesText = dbMatch[2].replace(/;.*$/, '').trim();
+                const buf: number[] = [];
+                emitDataBytes(kw, valuesText, buf, definitions, () => resolveValue, encodeString, sourceLine);
+                emitter.emit(buf);
+                i++;
+                continue;
+            }
+
+            i++;
+        }
+    }
+
+    processLines(bodyLines);
+}
+
 /** Evaluate a simple expression supporting +, -, &, |, ^, _NARG. */
 function evalExpr(
     expr: string,
@@ -378,117 +506,10 @@ function executeMacroBody(
     sourceLine?: number,
 ): number[] | null {
     const bytes: number[] = [];
-    const vars = new Map<string, number>();
-    let iterations = 0;
-
-    function resolveValue(text: string): number | null {
-        const trimmed = text.trim();
-        // Check local vars first
-        const varVal = vars.get(trimmed);
-        if (varVal !== undefined) return varVal;
-        // Number literal
-        const num = tryParseNumber(trimmed);
-        if (num !== null) return num;
-        // Constant from definitions
-        return resolveConstant(trimmed, definitions);
-    }
-
-    function substituteArgs(text: string): string {
-        return text
-            .replace(/\\#/g, args.join(', '))  // \# = all args joined
-            .replace(/\\([1-9])/g, (_, n) => args[parseInt(n) - 1] || '');
-    }
-
-    function evalSimpleExpr(expr: string): number | null {
-        return evalExpr(expr, args, resolveValue);
-    }
-
-    function processLines(lines: string[]): void {
-        let i = 0;
-        while (i < lines.length) {
-            if (++iterations > MAX_ITERATIONS) return;
-
-            let line = substituteArgs(lines[i]);
-            const upper = line.replace(/;.*$/, '').trim().toUpperCase();
-
-            // SHIFT
-            if (/^SHIFT\b/i.test(upper)) {
-                args.shift();
-                i++;
-                continue;
-            }
-
-            // DEF / REDEF var = expr
-            const defMatch = line.match(/^(?:RE)?DEF\s+(\w+)\s*=\s*(.+)$/i);
-            if (defMatch) {
-                const val = evalSimpleExpr(defMatch[2].replace(/;.*$/, '').trim());
-                if (val !== null) vars.set(defMatch[1], val);
-                i++;
-                continue;
-            }
-
-            // REPT expr ... ENDR
-            if (/^REPT\b/i.test(upper)) {
-                const reptMatch = line.match(/^REPT\s+(.+)$/i);
-                const count = reptMatch ? evalSimpleExpr(reptMatch[1].replace(/;.*$/, '').trim()) : 0;
-                // Collect lines until ENDR
-                const reptBody: string[] = [];
-                let depth = 1;
-                i++;
-                while (i < lines.length && depth > 0) {
-                    const innerUpper = lines[i].replace(/;.*$/, '').trim().toUpperCase();
-                    if (/^REPT\b/.test(innerUpper) || /^FOR\b/.test(innerUpper)) depth++;
-                    if (/^ENDR\b/.test(innerUpper)) { depth--; if (depth === 0) break; }
-                    reptBody.push(lines[i]);
-                    i++;
-                }
-                i++; // skip ENDR
-                if (count !== null && count > 0 && count <= 32) {
-                    for (let r = 0; r < count; r++) {
-                        processLines(reptBody);
-                    }
-                }
-                continue;
-            }
-
-            // IF expr ... ELSE ... ENDC
-            if (/^IF\b/i.test(upper)) {
-                const ifMatch = line.match(/^IF\s+(.+)$/i);
-                const cond = ifMatch ? evalSimpleExpr(ifMatch[1].replace(/;.*$/, '').trim()) : 0;
-                // Collect IF/ELSE/ENDC blocks
-                const ifBody: string[] = [];
-                const elseBody: string[] = [];
-                let inElse = false;
-                let depth = 1;
-                i++;
-                while (i < lines.length && depth > 0) {
-                    const innerUpper = lines[i].replace(/;.*$/, '').trim().toUpperCase();
-                    if (/^IF\b/.test(innerUpper)) depth++;
-                    if (/^ENDC\b/.test(innerUpper)) { depth--; if (depth === 0) break; }
-                    if (/^ELSE\b/.test(innerUpper) && depth === 1) { inElse = true; i++; continue; }
-                    (inElse ? elseBody : ifBody).push(lines[i]);
-                    i++;
-                }
-                i++; // skip ENDC
-                processLines(cond ? ifBody : elseBody);
-                continue;
-            }
-
-            // db/dw directive — emit bytes
-            const dbMatch = line.match(/^(db|dw)\s+(.+)$/i);
-            if (dbMatch) {
-                const kw = dbMatch[1].toLowerCase();
-                const valuesText = dbMatch[2].replace(/;.*$/, '').trim();
-                emitDataBytes(kw, valuesText, bytes, definitions, () => resolveValue, encodeString, sourceLine);
-                i++;
-                continue;
-            }
-
-            i++;
-        }
-    }
-
-    processLines(bodyLines);
+    executeMacroBodyCore(bodyLines, args, definitions, encodeString, sourceLine, {
+        emit(b) { bytes.push(...b); },
+        onShift() { /* no-op for flat output */ },
+    });
     return bytes.length > 0 ? bytes : null;
 }
 
@@ -504,114 +525,10 @@ function executeMacroBodyGrouped(
     sourceLine?: number,
 ): number[][] | null {
     const groups: number[][] = [[]];
-    const vars = new Map<string, number>();
-    let iterations = 0;
-
-    function resolveValue(text: string): number | null {
-        const trimmed = text.trim();
-        const varVal = vars.get(trimmed);
-        if (varVal !== undefined) return varVal;
-        const num = tryParseNumber(trimmed);
-        if (num !== null) return num;
-        return resolveConstant(trimmed, definitions);
-    }
-
-    function substituteArgs(text: string): string {
-        return text
-            .replace(/\\#/g, args.join(', '))  // \# = all args joined
-            .replace(/\\([1-9])/g, (_, n) => args[parseInt(n) - 1] || '');
-    }
-
-    function evalSimpleExpr(expr: string): number | null {
-        return evalExpr(expr, args, resolveValue);
-    }
-
-    function currentGroup(): number[] {
-        return groups[groups.length - 1];
-    }
-
-    function processLines(lines: string[]): void {
-        let i = 0;
-        while (i < lines.length) {
-            if (++iterations > MAX_ITERATIONS) return;
-
-            let line = substituteArgs(lines[i]);
-            const upper = line.replace(/;.*$/, '').trim().toUpperCase();
-
-            if (/^SHIFT\b/i.test(upper)) {
-                args.shift();
-                // Start a new group for the next argument
-                groups.push([]);
-                i++;
-                continue;
-            }
-
-            const defMatch = line.match(/^(?:RE)?DEF\s+(\w+)\s*=\s*(.+)$/i);
-            if (defMatch) {
-                const val = evalSimpleExpr(defMatch[2].replace(/;.*$/, '').trim());
-                if (val !== null) vars.set(defMatch[1], val);
-                i++;
-                continue;
-            }
-
-            if (/^REPT\b/i.test(upper)) {
-                const reptMatch = line.match(/^REPT\s+(.+)$/i);
-                const count = reptMatch ? evalSimpleExpr(reptMatch[1].replace(/;.*$/, '').trim()) : 0;
-                const reptBody: string[] = [];
-                let depth = 1;
-                i++;
-                while (i < lines.length && depth > 0) {
-                    const innerUpper = lines[i].replace(/;.*$/, '').trim().toUpperCase();
-                    if (/^REPT\b/.test(innerUpper) || /^FOR\b/.test(innerUpper)) depth++;
-                    if (/^ENDR\b/.test(innerUpper)) { depth--; if (depth === 0) break; }
-                    reptBody.push(lines[i]);
-                    i++;
-                }
-                i++;
-                if (count !== null && count > 0 && count <= 32) {
-                    for (let r = 0; r < count; r++) {
-                        processLines(reptBody);
-                    }
-                }
-                continue;
-            }
-
-            if (/^IF\b/i.test(upper)) {
-                const ifMatch = line.match(/^IF\s+(.+)$/i);
-                const cond = ifMatch ? evalSimpleExpr(ifMatch[1].replace(/;.*$/, '').trim()) : 0;
-                const ifBody: string[] = [];
-                const elseBody: string[] = [];
-                let inElse = false;
-                let depth = 1;
-                i++;
-                while (i < lines.length && depth > 0) {
-                    const innerUpper = lines[i].replace(/;.*$/, '').trim().toUpperCase();
-                    if (/^IF\b/.test(innerUpper)) depth++;
-                    if (/^ENDC\b/.test(innerUpper)) { depth--; if (depth === 0) break; }
-                    if (/^ELSE\b/.test(innerUpper) && depth === 1) { inElse = true; i++; continue; }
-                    (inElse ? elseBody : ifBody).push(lines[i]);
-                    i++;
-                }
-                i++;
-                processLines(cond ? ifBody : elseBody);
-                continue;
-            }
-
-            const dbMatch = line.match(/^(db|dw)\s+(.+)$/i);
-            if (dbMatch) {
-                const kw = dbMatch[1].toLowerCase();
-                const valuesText = dbMatch[2].replace(/;.*$/, '').trim();
-                emitDataBytes(kw, valuesText, currentGroup(), definitions, () => resolveValue, encodeString, sourceLine);
-                i++;
-                continue;
-            }
-
-            i++;
-        }
-    }
-
-    processLines(bodyLines);
-
+    executeMacroBodyCore(bodyLines, args, definitions, encodeString, sourceLine, {
+        emit(b) { groups[groups.length - 1].push(...b); },
+        onShift() { groups.push([]); },
+    });
     // Filter out empty groups
     const result = groups.filter(g => g.length > 0);
     return result.length > 0 ? result : null;
