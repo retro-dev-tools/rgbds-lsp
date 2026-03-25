@@ -67,15 +67,80 @@
         "rgbds.maxDiagnostics": {
           "type": "number",
           "default": 200,
-          "description": "Maximum number of diagnostics per file"
+          "minimum": 0,
+          "scope": "resource",
+          "markdownDescription": "Maximum number of diagnostics per file"
         },
         "rgbds.serverPath": {
           "type": "string",
           "default": "",
-          "description": "Path to rgbds-language-server module. Leave empty to auto-detect from global install."
+          "scope": "machine",
+          "markdownDescription": "Path to rgbds-language-server module. Leave empty to auto-detect from global install."
+        },
+        "rgbds.buildCommand": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "tags": ["experimental"],
+          "markdownDescription": "Shell command to build the ROM (e.g., `make`). Runs automatically when `.asm`/`.inc` files are saved, producing the ROM and `.sym` file needed for inlay hints. **Experimental**"
+        },
+        "rgbds.romPath": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "tags": ["experimental"],
+          "markdownDescription": "Path to the built ROM file (`.gb`/`.gbc`). Leave empty for auto-detect. **Experimental**"
+        },
+        "rgbds.symPath": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "tags": ["experimental"],
+          "markdownDescription": "Path to the symbol file (`.sym`). Leave empty for auto-detect. **Experimental**"
+        },
+        "rgbds.validateCommentBytes": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "markdownDescription": "Warn when hex byte annotations in comments (e.g., `; $3E $00`) don't match the computed assembled bytes"
+        },
+        "rgbds.assembledBytes.enabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "tags": ["experimental"],
+          "markdownDescription": "Show assembled hex bytes as decorations next to source lines. **Experimental**"
+        },
+        "rgbds.assembledBytes.maxBytesPerLine": {
+          "type": "number",
+          "default": 8,
+          "minimum": 1,
+          "scope": "resource",
+          "tags": ["experimental"],
+          "markdownDescription": "Maximum number of hex bytes to display per line. **Experimental**"
+        },
+        "rgbds.assembledBytes.alignColumn": {
+          "type": "number",
+          "default": 60,
+          "minimum": 1,
+          "scope": "resource",
+          "tags": ["experimental"],
+          "markdownDescription": "Column to align hex byte decorations to. **Experimental**"
         }
       }
     },
+    "commands": [
+      {
+        "command": "rgbds.configureBuild",
+        "title": "Configure Build",
+        "category": "RGBDS"
+      },
+      {
+        "command": "rgbds.clearCache",
+        "title": "Clear Index Cache",
+        "category": "RGBDS"
+      }
+    ],
     "problemMatchers": [
       {
         "name": "rgbdserror",
@@ -93,13 +158,15 @@
         "name": "rgbdslinkerror",
         "owner": "rgbds",
         "fileLocation": ["autoDetect", "${workspaceFolder}"],
-        "pattern": {
-          "regexp": "^(.+?)\\((\\d+)\\):\\s+(warning|ERROR):\\s+(.*)$",
-          "file": 1,
-          "line": 2,
-          "severity": 3,
-          "message": 4
-        }
+        "pattern": [
+          {
+            "regexp": "^(?:(.+?)\\((\\d+)\\):\\s+)?(warning|error|ERROR):\\s+(.*)$",
+            "file": 1,
+            "line": 2,
+            "severity": 3,
+            "message": 4
+          }
+        ]
       }
     ]
   },

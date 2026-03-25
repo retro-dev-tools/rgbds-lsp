@@ -18,7 +18,7 @@
         ["\"", "\""]
     ],
     "indentationRules": {
-        "increaseIndentPattern": "^\\s*(MACRO|IF|ELIF|ELSE|REPT|FOR|UNION|NEXTU|SECTION)\\b",
-        "decreaseIndentPattern": "^\\s*(ENDM|ENDC|ELSE|ELIF|ENDR|ENDU|NEXTU|ENDSECTION)\\b"
+        "increaseIndentPattern": "(?i)^\\s*(MACRO|IF|ELIF|ELSE|REPT|FOR|UNION|NEXTU)\\b",
+        "decreaseIndentPattern": "(?i)^\\s*(ENDM|ENDC|ELSE|ELIF|ENDR|ENDU|NEXTU|ENDSECTION)\\b"
     }
 }
