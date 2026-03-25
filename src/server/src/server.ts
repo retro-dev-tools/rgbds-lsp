@@ -955,7 +955,6 @@ function computeDiagnostics(doc: TextDocument): Diagnostic[] {
     // Validate hex byte annotations in comments against computed bytes
     if (validateCommentBytesEnabled) {
         const tree = rgbdsIndexer.getTree(uri);
-        connection.console.log(`[Diagnostics] validateCommentBytes enabled, tree=${!!tree} for ${uri.split('/').pop()}`);
         if (tree) {
             const mismatches = validateCommentBytes(
                 tree,
@@ -966,7 +965,6 @@ function computeDiagnostics(doc: TextDocument): Diagnostic[] {
                     const charmap = rgbdsIndexer.getActiveCharmap(uri, line);
                     return charmap ? rgbdsIndexer.encodeStringBytes(charmap, str) : null;
                 },
-                (msg) => connection.console.info(msg),
             );
             for (const m of mismatches) {
                 diagnostics.push({

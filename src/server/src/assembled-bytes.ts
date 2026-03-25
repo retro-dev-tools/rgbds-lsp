@@ -2,7 +2,7 @@ import Parser from 'tree-sitter';
 import { SM83_INSTRUCTIONS } from './instructions';
 import { matchInstructionForm } from './instruction-matcher';
 import { SymbolDef } from './types';
-import { stripQuotes } from './utils';
+import { stripQuotes, tryParseNumber, evalExpr } from './utils';
 
 export interface AssembledBytesSettings {
     enabled: boolean;
@@ -442,61 +442,6 @@ function executeMacroBodyCore(
     processLines(bodyLines);
 }
 
-/** Evaluate a simple expression supporting +, -, &, |, ^, _NARG. */
-function evalExpr(
-    expr: string,
-    args: string[],
-    resolveValue: (text: string) => number | null,
-): number | null {
-    const s = expr.trim();
-    if (s === '_NARG') return args.length;
-
-    // Tokenize: split on operators while keeping them
-    // Handle + and - (lowest precedence), then &, |, ^
-    // Simple left-to-right evaluation (no precedence beyond this)
-    const tokens = s.match(/(?:[^+\-&|^]+|[+\-&|^])/g);
-    if (!tokens) return resolveValue(s);
-
-    // Parse into values and operators
-    const values: number[] = [];
-    const ops: string[] = [];
-    let expectValue = true;
-
-    for (const raw of tokens) {
-        const tok = raw.trim();
-        if (!tok) continue;
-        if (expectValue) {
-            if (tok === '_NARG') {
-                values.push(args.length);
-            } else {
-                const v = resolveValue(tok);
-                if (v === null) return null;
-                values.push(v);
-            }
-            expectValue = false;
-        } else {
-            ops.push(tok);
-            expectValue = true;
-        }
-    }
-
-    if (values.length === 0) return null;
-    if (values.length === 1) return values[0];
-
-    let result = values[0];
-    for (let i = 0; i < ops.length; i++) {
-        const v = values[i + 1];
-        switch (ops[i]) {
-            case '+': result = result + v; break;
-            case '-': result = result - v; break;
-            case '&': result = result & v; break;
-            case '|': result = result | v; break;
-            case '^': result = result ^ v; break;
-            default: return null;
-        }
-    }
-    return result;
-}
 
 function executeMacroBody(
     bodyLines: string[],
@@ -749,15 +694,6 @@ function findStringInExpression(node: Parser.SyntaxNode): Parser.SyntaxNode | nu
 
 // ─── Helpers ──────────────────────────────────────────────────
 
-function tryParseNumber(text: string): number | null {
-    const trimmed = text.trim();
-    if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10);
-    if (/^\$[0-9a-fA-F]+$/.test(trimmed)) return parseInt(trimmed.slice(1), 16);
-    if (/^0x[0-9a-fA-F]+$/i.test(trimmed)) return parseInt(trimmed, 16);
-    if (/^%[01]+$/.test(trimmed)) return parseInt(trimmed.slice(1), 2);
-    return null;
-}
-
 function getLineEndCol(lineNode: Parser.SyntaxNode): number {
     const lastChild = lineNode.namedChildren[lineNode.namedChildren.length - 1];
     return lastChild ? lastChild.endPosition.column : lineNode.endPosition.column;
@@ -861,14 +797,10 @@ export function validateCommentBytes(
     definitions?: Map<string, SymbolDef>,
     getOrParseTree?: (uri: string) => Parser.Tree | undefined,
     encodeString?: (str: string, line: number) => number[] | null,
-    log?: (msg: string) => void,
 ): ByteMismatchDiagnostic[] {
     const results: ByteMismatchDiagnostic[] = [];
-    const filename = uri.split('/').pop();
     const sourceText = tree.rootNode.text;
     const sourceLines = sourceText.split(/\r?\n/);
-    log?.(`[ByteValidation] Scanning ${filename}, ${tree.rootNode.children.length} top-level nodes`);
-
     let commentsFound = 0;
     let bytesCommentsParsed = 0;
     let computedCount = 0;
@@ -884,14 +816,12 @@ export function validateCommentBytes(
         if (!commentBytes) return;
         bytesCommentsParsed++;
 
-        log?.(`[ByteValidation] Line ${lineNum + 1}: comment="${commentText.slice(0, 50)}", parsed=[${formatBytesFlat(commentBytes)}]`);
 
         if (computedBytes.length === 0) return;
         computedCount++;
         if (computedBytes.every(b => b === -1)) return;
 
         const match = bytesMatch(commentBytes, computedBytes);
-        log?.(`[ByteValidation] Line ${lineNum + 1}: computed=[${formatBytesFlat(computedBytes)}], match=${match}`);
 
         if (!match) {
             results.push({
@@ -956,6 +886,5 @@ export function validateCommentBytes(
         checkLine(startRow, computedBytes, commentNode.text, commentNode.startPosition.column);
     }
 
-    log?.(`[ByteValidation] Done: ${commentsFound} comments, ${bytesCommentsParsed} with byte annotations, ${computedCount} with computed bytes, ${results.length} mismatches`);
     return results;
 }
