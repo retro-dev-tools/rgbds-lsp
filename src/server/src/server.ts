@@ -72,7 +72,6 @@ connection.onInitialize((params: InitializeParams) => {
 
     // Capture assembled bytes settings from initialization options
     const initOptions = params.initializationOptions;
-    connection.console.info(`[Server] Init options: ${JSON.stringify(initOptions || {})}`);
     if (initOptions?.assembledBytes) {
         assembledBytesSettings = {
             enabled: initOptions.assembledBytes.enabled ?? false,
@@ -228,7 +227,7 @@ connection.onDidChangeConfiguration((params) => {
             enabled: settings.assembledBytes?.enabled ?? false,
             maxBytesPerLine: settings.assembledBytes?.maxBytesPerLine ?? 8,
         };
-        connection.console.info(`[Config] Assembled bytes enabled=${assembledBytesSettings.enabled}`);
+        connection.console.log(`[Config] Settings updated`);
         if (settings.inlayHints) {
             inlayHintSettings = {
                 constantValues: settings.inlayHints.constantValues ?? true,

@@ -284,7 +284,7 @@ export class Indexer {
         const tIndex = Date.now();
 
         // Extract charmap data (needs trees, so parse on-demand for cached files)
-        this.extractAllCharmaps();
+        this.extractAllCharmaps(true);
         const tCharmap = Date.now();
 
         // Save cache for next startup
@@ -300,7 +300,7 @@ export class Indexer {
      * Runs after initial indexing to ensure charmap data is available
      * even when files were loaded from cache (no extractSymbols call).
      */
-    private extractAllCharmaps(): void {
+    private extractAllCharmaps(logSummary = false): void {
         this.charmapEntries.clear();
         this.charmapState.clear();
         this.currentCharmapDef = '';
@@ -332,9 +332,11 @@ export class Indexer {
             }
         }
 
-        let totalEntries = 0;
-        for (const [, entries] of this.charmapEntries) totalEntries += entries.size;
-        this.log(`Charmap data: ${this.charmapEntries.size} charmaps, ${totalEntries} entries, ${this.charmapState.size} files with state`);
+        if (logSummary) {
+            let totalEntries = 0;
+            for (const [, entries] of this.charmapEntries) totalEntries += entries.size;
+            this.log(`Charmap data: ${this.charmapEntries.size} charmaps, ${totalEntries} entries, ${this.charmapState.size} files with state`);
+        }
     }
 
     private loadCache(cachePath: string): CacheFile | null {
